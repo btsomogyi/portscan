@@ -62,20 +62,94 @@ func throwError(err error) {
 	os.Exit(1)
 }
 
+// input method parses the user input and adds targets to the multi.Targets channel.
+// For each target to be added to the multi.Targets channel, the number of probes
+// for that target is calculated and pushed on the probeCount channel.
+// Listens for closure of the done channel to signal premature app shutdown
+// closes the inputFinished channel when all user input has been processed
+
+/*
+func input(params *scan.Params, multi *scan.Multi, inputFinished chan<- struct{}, probeCount chan<- int, done <-chan bool) {
+	select {
+		case <-done:
+			defer close(inputFinish)
+			defer close(probeCount)
+		default:
+			// add to probeCount, add to target channel
+	}
+	 
+}
+
+
+// processor consumes the targets placed on the multi.Targets channel.
+// 
+func processor(multi *scan.Multi, results chan *probe, probeCount <-chan int, inputFinished <-chan struct {}, done <-chan bool) {
+	var target *net.IPAddr
+	var expected int
+	var received int
+	for {
+		select {
+			case count <-probeCount:
+				expected += count
+			case target <- multi.Targets:
+			// create Single in goroutine, pass results channel
+			case <-done:
+				// done asserted, defer channel close and return
+			default:
+				select {
+					case <-results:
+						// remove token from throttle, send probe to output, increment received++
+						<-throttle
+						received++
+						
+					default:
+					select {
+						case <-inputFinished:
+							// check that received == expected, if so, break loop
+						default:
+						// cycle loop for more results
+					}
+					
+				}
+		}
+	}
+}
+
+*/
+
+/*
+func driver(probeCount <-chan[int], inputFinished <-chan[struct {}], done chan[struct {}]<-) {
+	
+	
+}
+*/
+
 func main() {
 
-	params := &Params{}
+	params := &scan.Params{}
 
-	err := params.ProcessParameters(os.Args[0])
+	err := ProcessParameters(params, os.Args[0])
 	if err != nil {
 		os.Exit(1)
 	}
 	
-	err = params.adjustRlimit()
+	scan, err := scan.NewScan(params)
 	if err != nil {
 		Error.Printf("%s\n", err)
 	}
 
+	// Defer the close of the done channel to shutdown stray goroutines on program close
+	defer close(scan.Done)
+	
+	// Initiate processing of target list
+	scan.ProcessTargets() 
+	
+	// Begin target processing
+	scan.PerformScan()
+	
+	err = outputScan(scan)
+	
+/*
 	userSpec, err := scan.NewMulti("127.0.0.1", params.firstPort, params.lastPort)
 	if err != nil {
 		throwError(err)
@@ -98,5 +172,6 @@ func main() {
 			Error.Printf("Output Error: %s\n", anerr)
 		}
 	}
+*/
 
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// NEEDED???
 func init() {
 	//LogInit(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
 	LogInit(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
@@ -17,11 +18,11 @@ func init() {
 
 // Probe struct contains the parameters and results of a single port probe
 type Probe struct {
-	Source      net.TCPAddr
-	Target      net.TCPAddr
-//	Timeout     time.Duration
-	Result      ResultType
-//	ServiceName string
+	Source  net.TCPAddr
+	Target  net.TCPAddr
+	Timeout time.Duration
+	Result  ResultType
+	//	ServiceName string
 }
 
 // ResultType holds the raw connection error (if any) and the interpreted result
@@ -64,12 +65,17 @@ func (r ResultState) String() string {
 	return s
 }
 
+/////
+// Constructors
+/////
+
 // NewProbe is an alternative constructor for Probe struct that takes strings
 // and converts them to the appropriate TCPAddr types, then returns the resulting
 // Probe struct
-func NewProbe(sourceAddr, targetAddr string, sourcePort, targetPort int) (*Probe, error) {
+func newProbe(sourceAddr, targetAddr string, sourcePort, targetPort int) (*Probe, error) {
 	Trace.Printf("sourceAddr: %s sourcePort: %s targetAddr: %s targetPort: %s\n", sourceAddr, sourcePort, targetAddr, targetPort)
 	// Determine if IPv4 of IPv6 in order to format service string appropriately (enclose IPv6 addr in "[]")
+
 	src, err := net.ResolveIPAddr("ip", sourceAddr)
 	if err != nil {
 		Error.Printf("probe.NewProbe error: %s", err.Error())
@@ -84,29 +90,19 @@ func NewProbe(sourceAddr, targetAddr string, sourcePort, targetPort int) (*Probe
 	}
 	tgtAddr := net.TCPAddr{tgt.IP, targetPort, tgt.Zone}
 
-	//
-	/*
-		srcAddr, err := net.ResolveTCPAddr("tcp", sourceAddr+":"+strconv.Itoa(sourcePort))
-		if err != nil {
-			Error.Printf("probe.NewProbe error: %s", err.Error())
-			return &Probe{}, err
-		}
-		tgtAddr, err := net.ResolveTCPAddr("tcp", targetAddr+":"+strconv.Itoa(targetPort))
-		if err != nil {
-			Error.Printf("probe.NewProbe error: %s", err.Error())
-			return &Probe{}, err
-		}
-	*/
-
 	return &Probe{Source: srcAddr, Target: tgtAddr}, nil
 }
+
+/////
+// Methods
+/////
 
 // Send initiates a probe via a full TCP handshake negotiation with the
 // target service using standard 'net' library methods.  The Probe object is
 // updated with the results of the connection attempt.  Only Target values are
 // required in the Probe object for type one probes, and will use the Timeout
 // value from the Probe object if non-zero
-func (p *Probe) Send(timeout time.Duration) (fail error) {
+func (p *Probe) Send() (fail error) {
 	var conn net.Conn
 	var err error
 	var sleeprange time.Duration
@@ -116,10 +112,10 @@ func (p *Probe) Send(timeout time.Duration) (fail error) {
 	// If timeout longer, sleep for rand(timeout) / 2 seconds
 	//Trace.Printf("Probe.Send() probe.Timeout: %f s\n", p.Timeout.Seconds())
 	//if int(p.Timeout.Seconds()) <= 4 {
-	if int(timeout.Seconds()) <= 4 {
+	if int(p.Timeout.Seconds()) <= 4 {
 		sleeprange = time.Duration(2) * time.Second
 	} else {
-		sleeprange = time.Duration(timeout.Seconds()/2) * time.Second
+		sleeprange = time.Duration(p.Timeout.Seconds()/2) * time.Second
 	}
 
 	Trace.Printf("Probe.Send() sleep range: %f s\n", sleeprange.Seconds())
@@ -127,29 +123,30 @@ func (p *Probe) Send(timeout time.Duration) (fail error) {
 	// Confirm target exists
 	if &p.Target != nil {
 
-		// Loop to ensure that if file limit is hit, sleep to allow other connections to finish
+		// Loop to ensure that if file limit error is hit, sleep to allow other
+		// connections to finish and retry
 		for {
-			if timeout != 0 {
-				conn, err = net.DialTimeout("tcp", p.Target.String(), timeout)
+			if p.Timeout != 0 {
+				conn, err = net.DialTimeout("tcp", p.Target.String(), p.Timeout)
 				if err != nil {
-//					Trace.Printf("Probe.Send() net.DialTimeout err.Error(): %s\n", err.Error())
+					//					Trace.Printf("Probe.Send() net.DialTimeout err.Error(): %s\n", err.Error())
 				}
 
 			} else { // no Timeout set in probe object, use net.Dial
 				//			fmt.Fprintf(os.Stderr, "p.Target.String(): %s\n", p.Target.String())
 				conn, err = net.Dial("tcp", p.Target.String())
 				if err != nil {
-//					Trace.Printf("Probe.Send() net.Dial err.Error(): %s\n", err.Error())
+					//					Trace.Printf("Probe.Send() net.Dial err.Error(): %s\n", err.Error())
 				}
 			}
+
 			// if connection good or error not regarding open file limit,
 			// break out of loop for further processing
 			if err == nil || !strings.Contains(err.Error(), "open files") {
-//				Trace.Printf("err != nil || !strings.Contains(p.Result.Raw.Error(), 'open files')\n")
+				//				Trace.Printf("err != nil || !strings.Contains(p.Result.Raw.Error(), 'open files')\n")
 				p.Result.Raw = err
 				break
 			} else {
-//				Trace.Printf("else clause")
 				// Sleep randomized duration in from 1-sleeprange seconds
 				sleeptime := time.Duration(float64(sleeprange.Nanoseconds()) * rand.Float64())
 				time.Sleep(sleeptime)
@@ -160,7 +157,7 @@ func (p *Probe) Send(timeout time.Duration) (fail error) {
 		fail = fmt.Errorf("probe.Send Error: probe.Target not set")
 	}
 
-	// close connection if successful
+	// close connection if successful and mark target service as OPEN
 	if conn != nil {
 		defer conn.Close()
 		p.Result.State = OPEN
@@ -186,6 +183,40 @@ func (p *Probe) Send(timeout time.Duration) (fail error) {
 	}
 
 	return
+}
+
+// SendAsync initiates a probe.Send() with inputs of done, results, and
+// error channels.  If done channel remains open when probe.Scan returns
+// any error is pushed on the err channel and the probe is pushed on the results
+// channel.
+
+func (p *Probe) SendAsync(s *Scan) {
+	Trace.Printf("Probe.SendAsync() Enter... [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
+	go func() {
+		err := p.Send()
+		Trace.Printf("Probe.SendAsync() p.Send() [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
+		select {
+		case <-s.Done:
+			Trace.Printf("Probe.SendAsync() case <-s.Done: [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
+			return
+		default:
+			Trace.Printf("Probe.SendAsync() default: [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
+			{
+				if err != nil {
+					Trace.Println("Probe.SendAsync() err != nil: [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
+					s.Errors <- err
+				}
+				Trace.Printf("Probe.SendAsync() s.resultsChan <- p: [p.Target IP:%s] [p.Port: %d] [p.Result.State: %s]\n", 
+					p.Target.IP.String(), p.Target.Port, p.Result.State)
+				s.resultsChan <- p
+			}
+		}
+	}()
+}
+
+// GetResult formats the probe result data for output
+func (p *Probe) GetResult() (result string) {
+	return fmt.Sprintf("%s:%d result: %s \n", p.Target.IP, p.Target.Port, p.Result.State.String())
 }
 
 // GetPort obtains a free unused port and confirms it can be bound

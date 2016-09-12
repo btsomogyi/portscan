@@ -12,7 +12,7 @@ import (
 func ExampleNewProbe() {
 	//logging.InitDefault()
 
-	test, err := NewProbe("127.0.0.1", "192.168.1.1", 2001, 1999)
+	test, err := newProbe("127.0.0.1", "192.168.1.1", 2001, 1999)
 	if err == nil {
 		fmt.Println("Source: ", test.Source.String())
 		fmt.Println("Target: ", test.Target.String())
@@ -28,13 +28,14 @@ func Test1Send(t *testing.T) {
 
 	unused := GetPort()
 	//	t.Log("Test1Send: Select Target Port: ", unused)
-	test, err := NewProbe("", "", 2001, unused)
+	test, err := newProbe("", "", 2001, unused)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: ", err.Error())
 		t.Fatalf("Fatal error: %s", err.Error())
 	}
 
-	err = test.Send(3 * time.Second)
+	test.Timeout = 3 * time.Second
+	err = test.Send()
 
 	if err != nil {
 		t.Log("Test1Send: test failed to run")
@@ -58,13 +59,14 @@ func Test2Send(t *testing.T) {
 		t.Fail()
 	}
 
-	test, err := NewProbe("", addrs[0], 2003, 80)
+	test, err := newProbe("", addrs[0], 2003, 80)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: ", err.Error())
 		t.Fatalf("Fatal error: %s", err.Error())
 	}
 
-	err = test.Send(3 * time.Second)
+	test.Timeout = 3 * time.Second
+	err = test.Send()
 	if err != nil {
 		t.Log("Test2Send: test failed to run")
 		t.Fail()
@@ -82,15 +84,15 @@ func Test3Send(t *testing.T) {
 	t.Parallel()
 	unused := GetPort()
 	//	t.Log("Test1Send: Select Target Port: ", unused)
-	test, err := NewProbe("", "", 2001, unused)
-	//test.Timeout = 3 * time.Second
+	test, err := newProbe("", "", 2001, unused)
+	test.Timeout = 3 * time.Second
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: ", err.Error())
 		t.Fatalf("Fatal error: %s", err.Error())
 	}
 
-	err = test.Send(3 * time.Second)
+	err = test.Send()
 
 	if err != nil {
 		t.Log("Test3Send: test failed to run")
@@ -114,15 +116,15 @@ func Test4Send(t *testing.T) {
 		t.Fail()
 	}
 
-	test, err := NewProbe("", addrs[0], 2003, 80)
-	//test.Timeout = 3 * time.Second
+	test, err := newProbe("", addrs[0], 2003, 80)
+	test.Timeout = 3 * time.Second
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: ", err.Error())
 		t.Fatalf("Fatal error: %s", err.Error())
 	}
 
-	err = test.Send(3 * time.Second)
+	err = test.Send()
 	if err != nil {
 		t.Log("Test4Send: test failed to run")
 		t.Fail()
@@ -139,16 +141,16 @@ func Test4Send(t *testing.T) {
 func Test5Send(t *testing.T) {
 	t.Parallel()
 
-	test, err := NewProbe("", "127.10.10.10", 2001, 2001)
-	//test.Timeout = 3 * time.Second
+	test, err := newProbe("", "127.10.10.10", 2001, 2001)
+	test.Timeout = 3 * time.Second
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: ", err.Error())
 		t.Fatalf("Fatal error: %s", err.Error())
 	}
 
-	err = test.Send(3 * time.Second)
-	
+	err = test.Send()
+
 	if err != nil {
 		t.Log("Test5Send: test failed to run")
 		t.Fail()
@@ -165,15 +167,16 @@ func Test5Send(t *testing.T) {
 func Test6Send(t *testing.T) {
 	t.Parallel()
 
-	test, err := NewProbe("", "2607:f8b0:4006:807::2004", 2001, 2001)
-	//test.Timeout = 3 * time.Second
+	test, err := newProbe("", "2607:f8b0:4006:807::2004", 2001, 2001)
+	test.Timeout = 3 * time.Second
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: ", err.Error())
 		t.Fatalf("Fatal error: %s", err.Error())
 	}
 
-	err = test.Send(3 * time.Second)
+	test.Timeout = 3 * time.Second
+	err = test.Send()
 	if err != nil {
 		t.Log("Test5Send: test failed to run")
 		t.Fail()
