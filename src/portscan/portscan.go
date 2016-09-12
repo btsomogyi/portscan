@@ -2,11 +2,15 @@ package main
 
 import (
 	//"fmt"
+	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"scan"
+	"time"
 )
 
 var (
@@ -57,72 +61,103 @@ func LogInit(
 
 }
 
+// ProcessParameters declares all command line flags, and calls all subroutines
+// for processing specific command line parameters
+func ProcessParameters(params *scan.Params, cmdname string) (err error) {
+
+	portFlag := flag.String("port", "1-65535", "single port, or range of ports to scan")
+	timeoutFlag := flag.Int("timeout", 5, "probe timeout value(s), '0' for system default")
+	throttleFlag := flag.Int("throttle", 1000000, "concurrent probes")
+	//outputFlag := flag.String("output", "stdout", "filename to use instead of console")
+	//connectFlag := flag.Bool("showall", false, "display all scan results, not only answering ports")
+	//sourceFlag := flag.String("addr", "", "source interface address: defaults to local routed interface")
+	//sourcePortFlag := flag.Int("srcport", 0, "source port for probes: defaults to random")
+
+	flag.Parse()
+
+	Trace.Println("params.ParsePortsOpt(portFlag)")
+	err = params.ParsePortsOpt(portFlag)
+	if err != nil {
+		fmt.Println(err.Error())
+		PrintUsage(cmdname)
+		return
+	}
+	err = params.ParseTimeoutOpt(timeoutFlag)
+	if err != nil {
+		fmt.Println(err.Error())
+		PrintUsage(cmdname)
+		return
+	}
+	err = params.ParseThrottleOpt(throttleFlag)
+	if err != nil {
+		fmt.Println(err.Error())
+		PrintUsage(cmdname)
+		return
+	}
+	err = params.ParseTimeoutOpt(timeoutFlag)
+	if err != nil {
+		fmt.Println(err.Error())
+		PrintUsage(cmdname)
+		return
+	}
+	err = params.ParsePortsOpt(portFlag)
+	if err != nil {
+		fmt.Println(err.Error())
+		PrintUsage(cmdname)
+		return
+	}
+	params.SetTargetArgs(flag.Args())
+	return
+}
+
+// PrintUsage outputs the command line syntax and all the parameter defaults
+func PrintUsage(cmdname string) {
+	fmt.Printf("%s: [flags] target1 target2...\n target = [ip addr | CIDR net] eg 127.0.0.1 10.0.0.0/24\n", filepath.Base(cmdname))
+	flag.PrintDefaults()
+}
+
+/*
 func throwError(err error) {
 	Error.Printf("Fatal Error: %s\n", err)
 	os.Exit(1)
 }
+*/
 
-// input method parses the user input and adds targets to the multi.Targets channel.
-// For each target to be added to the multi.Targets channel, the number of probes
-// for that target is calculated and pushed on the probeCount channel.
-// Listens for closure of the done channel to signal premature app shutdown
-// closes the inputFinished channel when all user input has been processed
+// outputScan
+func outputScan(scan *scan.Scan) (err error) {
+	var oerr error
+	var result *string
+	var count int
 
-/*
-func input(params *scan.Params, multi *scan.Multi, inputFinished chan<- struct{}, probeCount chan<- int, done <-chan bool) {
-	select {
-		case <-done:
-			defer close(inputFinish)
-			defer close(probeCount)
-		default:
-			// add to probeCount, add to target channel
-	}
-	 
-}
-
-
-// processor consumes the targets placed on the multi.Targets channel.
-// 
-func processor(multi *scan.Multi, results chan *probe, probeCount <-chan int, inputFinished <-chan struct {}, done <-chan bool) {
-	var target *net.IPAddr
-	var expected int
-	var received int
 	for {
+
 		select {
-			case count <-probeCount:
-				expected += count
-			case target <- multi.Targets:
-			// create Single in goroutine, pass results channel
-			case <-done:
-				// done asserted, defer channel close and return
-			default:
-				select {
-					case <-results:
-						// remove token from throttle, send probe to output, increment received++
-						<-throttle
-						received++
-						
-					default:
-					select {
-						case <-inputFinished:
-							// check that received == expected, if so, break loop
-						default:
-						// cycle loop for more results
-					}
-					
+		case result = <-scan.Output:
+			Trace.Println("outputScan: result = <-scan.Output")
+			fmt.Println(result)
+
+		case oerr = <-scan.Errors:
+			Trace.Println("outputScan: oerr = <-scan.Errors:")
+			fmt.Println(oerr.Error())
+		default:
+			Trace.Println("outputScan: default:")
+			select {
+			case <-scan.Done:
+				Trace.Println("outputScan: <-scan.Done:")
+				return
+			case <-time.After(time.Nanosecond * 1000000000):
+				count++
+				Trace.Println("outputScan: count=", count)
+				if count > 10 {
+					err = fmt.Errorf("outputScan error: count > 60")
+					return err
 				}
+				continue
+			}
+
 		}
 	}
 }
-
-*/
-
-/*
-func driver(probeCount <-chan[int], inputFinished <-chan[struct {}], done chan[struct {}]<-) {
-	
-	
-}
-*/
 
 func main() {
 
@@ -132,7 +167,7 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
-	
+
 	scan, err := scan.NewScan(params)
 	if err != nil {
 		Error.Printf("%s\n", err)
@@ -140,38 +175,13 @@ func main() {
 
 	// Defer the close of the done channel to shutdown stray goroutines on program close
 	defer close(scan.Done)
-	
+
 	// Initiate processing of target list
-	scan.ProcessTargets() 
-	
+	scan.ProcessTargets()
+
 	// Begin target processing
 	scan.PerformScan()
-	
+
 	err = outputScan(scan)
-	
-/*
-	userSpec, err := scan.NewMulti("127.0.0.1", params.firstPort, params.lastPort)
-	if err != nil {
-		throwError(err)
-	}
-
-	err = params.InitializeMulti(userSpec)
-	if err != nil {
-		throwError(err)
-	}
-
-	//	err = userSpec.Scan()
-	userSpec.Scan()
-	if err != nil {
-		throwError(err)
-	}
-
-	oerrs := outputMulti(userSpec)
-	if oerrs != nil {
-		for anerr := range oerrs {
-			Error.Printf("Output Error: %s\n", anerr)
-		}
-	}
-*/
 
 }

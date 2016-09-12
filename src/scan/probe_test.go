@@ -22,6 +22,22 @@ func ExampleNewProbe() {
 	// Target:  192.168.1.1:1999
 }
 
+// Simple example of alternative constructor
+func ExampleGetResult() {
+	//logging.InitDefault()
+
+	test, err := newProbe("127.0.0.1", "192.168.1.1", 2001, 1999)
+	result := ResultType{Raw: fmt.Errorf("i/o timeout"), State: FILTERED}
+	test.Result = result
+	
+	if err == nil {
+		fmt.Println("Probe:", test.GetResult())
+	}
+	// Output:
+	// Probe: 192.168.1.1:1999 result: FILTERED
+
+}
+
 // Test1Send attempt connection to an unused local port, ensuring connection failure
 func Test1Send(t *testing.T) {
 	t.Parallel()

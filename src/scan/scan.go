@@ -2,15 +2,13 @@
 package scan
 
 import (
-	//"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"math"
+//	"math"
 	"net"
 	"os"
-	//"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -70,7 +68,7 @@ const MAXPORT = 65535
 
 // SLEEPTIME is number of milliseconds which the ProcessScan function will
 // sleep when no work is available in channels, but scan not yet complete
-const SLEEPTIME = 1000
+const SLEEPTIME = 100
 
 // Params holds the functional parameters needed for a scan object to function
 type Params struct {
@@ -96,7 +94,7 @@ type Scan struct {
 	throttleChan  chan int
 	expectedChan  chan int
 }
-
+/*
 type Multi struct {
 	Source    *net.IPAddr
 	Targets   []*net.IPAddr
@@ -107,6 +105,7 @@ type Multi struct {
 	Results   []*Single
 	Channel   chan *Single
 }
+*/
 
 /////
 // Constructors
@@ -136,6 +135,7 @@ func NewScan(params *Params) (scan *Scan, err error) {
 	return
 }
 
+/*
 // NewMulti provides a validated constructor for a new Multi object.  Returns Multi object
 // and any errors encountered during address validation.  Use AddMultiIP to increment Targets list
 func NewMulti(sourceAddr string, firstPort, lastPort int) (temp *Multi, err error) {
@@ -151,6 +151,7 @@ func NewMulti(sourceAddr string, firstPort, lastPort int) (temp *Multi, err erro
 	}
 	return temp, err
 }
+*/
 
 /////
 // Scan Methods
@@ -343,6 +344,7 @@ func (scan *Scan) PerformScan() {
 	}()
 }
 
+/*
 /////
 // Multi Methods
 /////
@@ -369,6 +371,7 @@ func (m *Multi) AddMultiIPSlice(targetAddr []*net.IPAddr) (err error) {
 	m.Targets = append(m.Targets, targetAddr...)
 	return
 }
+*/
 
 func CheckPorts(firstPort, lastPort int) (err error) {
 	if firstPort > 0 && lastPort <= MAXPORT && firstPort <= lastPort {
@@ -379,6 +382,7 @@ func CheckPorts(firstPort, lastPort int) (err error) {
 	}
 }
 
+/*
 // Multi.Scan implements the scan across multiple targets.  The throttle value
 // is use to determine the maximum number of concurrent probe.Send() goroutines
 // that should be allowed simultaneously.  This is implemented using a two-
@@ -490,6 +494,7 @@ func (m *Multi) Scan() {
 	}
 
 }
+*/
 
 /////
 // Param Methods

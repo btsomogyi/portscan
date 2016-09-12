@@ -73,7 +73,7 @@ func (r ResultState) String() string {
 // and converts them to the appropriate TCPAddr types, then returns the resulting
 // Probe struct
 func newProbe(sourceAddr, targetAddr string, sourcePort, targetPort int) (*Probe, error) {
-	Trace.Printf("sourceAddr: %s sourcePort: %s targetAddr: %s targetPort: %s\n", sourceAddr, sourcePort, targetAddr, targetPort)
+	Trace.Printf("sourceAddr: %s sourcePort: %d targetAddr: %s targetPort: %d\n", sourceAddr, sourcePort, targetAddr, targetPort)
 	// Determine if IPv4 of IPv6 in order to format service string appropriately (enclose IPv6 addr in "[]")
 
 	src, err := net.ResolveIPAddr("ip", sourceAddr)
@@ -129,21 +129,17 @@ func (p *Probe) Send() (fail error) {
 			if p.Timeout != 0 {
 				conn, err = net.DialTimeout("tcp", p.Target.String(), p.Timeout)
 				if err != nil {
-					//					Trace.Printf("Probe.Send() net.DialTimeout err.Error(): %s\n", err.Error())
 				}
 
 			} else { // no Timeout set in probe object, use net.Dial
-				//			fmt.Fprintf(os.Stderr, "p.Target.String(): %s\n", p.Target.String())
 				conn, err = net.Dial("tcp", p.Target.String())
 				if err != nil {
-					//					Trace.Printf("Probe.Send() net.Dial err.Error(): %s\n", err.Error())
 				}
 			}
 
 			// if connection good or error not regarding open file limit,
 			// break out of loop for further processing
 			if err == nil || !strings.Contains(err.Error(), "open files") {
-				//				Trace.Printf("err != nil || !strings.Contains(p.Result.Raw.Error(), 'open files')\n")
 				p.Result.Raw = err
 				break
 			} else {
