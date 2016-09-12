@@ -246,74 +246,6 @@ Loop:
 	}
 }
 
-/****
-
-// Test2ParseTargetArg - good input (CIDR addrs)
-func Test2ParseTargetArg(t *testing.T) {
-	t.SkipNow()
-	argSlice := []string{"192.168.0.0/30"}
-	params := &Params{}
-	var err error
-	if err = params.ParseTargetArg(argSlice); err != nil {
-		t.Logf("Test2ParseTargetArg error: %s\n", err)
-		t.Fail()
-	}
-	if err = validateParamArgs(params, 256); err != nil {
-		t.Logf("Test2ParseTargetArg error: %s\n", err)
-		t.Fail()
-	}
-}
-
-// Test3ParseTargetArg - good input (subnets)
-func Test3ParseTargetArg(t *testing.T) {
-	argSlice := []string{"192.168.0.10/24", "2001:db8::68/127"}
-	params := &Params{}
-	var err error
-	if err = params.ParseTargetArg(argSlice); err != nil {
-		t.Logf("Test3ParseTargetArg error: %s\n", err)
-		t.Fail()
-	}
-	if err = validateParamArgs(params, 258); err != nil {
-		t.Logf("Test3ParseTargetArg error: %s\n", err)
-		t.Fail()
-	}
-}
-
-// Test4ParseTargetArg - good input (mixed ip and subnet)
-func Test4ParseTargetArg(t *testing.T) {
-	argSlice := []string{"192.168.0.10", "2001:db8::68/127"}
-	params := &Params{}
-	var err error
-	if err = params.ParseTargetArg(argSlice); err != nil {
-		t.Logf("Test4ParseTargetArg error: %s\n", err)
-		t.Fail()
-	}
-	if err = validateParamArgs(params, 3); err != nil {
-		t.Logf("Test4ParseTargetArg error: %s\n", err)
-		t.Fail()
-	}
-}
-
-// Test5ParseTargetArg - bad input (bad addr)
-func Test5ParseTargetArg(t *testing.T) {
-	argSlice := []string{"192.168.0.296", "2001:db8:"}
-	params := &Params{}
-	var err error
-	if err = params.ParseTargetArg(argSlice); err == nil {
-		t.Logf(" error: %s\n", err)
-		t.Logf("Test5ParseTargetArg bad input (bad addr) uncaught: [argSlice: %s]\n",
-			argSlice)
-		t.Fail()
-	}
-	if err = validateParamArgs(params, len(argSlice)); err == nil {
-		t.Logf("Test5ParseTargetArg bad input (bad addr) uncaught: [argSlice: %s]\n",
-			argSlice)
-		t.Fail()
-	}
-}
-
-***/
-
 // Test1incrementIP - good input (single addrs)
 func Test1incrementIP(t *testing.T) {
 	//argSlice := []string{"192.168.0.1"}
@@ -326,43 +258,6 @@ func Test1incrementIP(t *testing.T) {
 		t.Fail()
 	}
 }
-
-/////
-// Helper function to validate test results of Multi tests
-/////
-/*
-// validateSingleScan helper function to validate test results of Single tests
-func validateSingleScan(single *Single, t *testing.T) {
-	for index, element := range single.Results {
-		if element == nil {
-			t.Log("Test1SingleScan: incomplete Results, element", index)
-			t.Fail()
-			break
-		}
-	}
-}
-
-// validateMultiScan helper function to validate test results of Multi tests
-func validateMultiScan(multi *Multi, t *testing.T) {
-
-	for index, element := range multi.Results {
-		if element == nil {
-			t.Log("MultiScan: incomplete Results, element", index)
-			t.Fail()
-			break
-		}
-		//t.Log("Test1Scan: ", index, element.Result)
-		for idx, result := range element.Results {
-			if result == nil {
-				t.Log("MultiScan: incomplete Results, element", idx)
-				t.Fail()
-				break
-			}
-			//t.Log("Test1Scan: ", index, element.Result)
-		}
-	}
-}
-*/
 
 // validateParamPorts checks for valid Params.firstPort and Params.lastPort values
 func validateParamPorts(params *Params) (err error) {

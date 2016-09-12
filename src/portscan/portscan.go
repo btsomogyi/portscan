@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"scan"
-	"time"
+	//"time"
 )
 
 var (
@@ -123,6 +123,7 @@ func throwError(err error) {
 }
 */
 
+/*
 // outputScan
 func outputScan(scan *scan.Scan) (err error) {
 	var oerr error
@@ -134,7 +135,7 @@ func outputScan(scan *scan.Scan) (err error) {
 		select {
 		case result = <-scan.Output:
 			Trace.Println("outputScan: result = <-scan.Output")
-			fmt.Println(result)
+			fmt.Printf(*result)
 
 		case oerr = <-scan.Errors:
 			Trace.Println("outputScan: oerr = <-scan.Errors:")
@@ -158,6 +159,7 @@ func outputScan(scan *scan.Scan) (err error) {
 		}
 	}
 }
+*/
 
 func main() {
 
@@ -182,6 +184,8 @@ func main() {
 	// Begin target processing
 	scan.PerformScan()
 
-	err = outputScan(scan)
+	// Wait for output to complete
+	<-scan.OutputDoneChan
+//	err = outputScan(scan)
 
 }

@@ -6,7 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-//	"math"
+	//	"math"
 	"net"
 	"os"
 	"strconv"
@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 )
+
+// Initialize
 
 func init() {
 	debug := os.Getenv("LOGLVL")
@@ -81,31 +83,28 @@ type Params struct {
 	targetArgs *[]string
 }
 
+// OutputFunc is the method used to process Probe results
+type OutputFunc func(*Probe)
+
+// ErrorFunc is the method used to process Error stream
+type ErrorFunc func(error)
+
 // Scan object is primary means of utilizing scan package, providing creating
-// code with all needed methods to initialize and drive a portscan
+// code with all needed methods to initialize and drive a portscan.  OutputF
+// can be overridden for advanced output processing (eg sorting)
 type Scan struct {
 	Params
-	Targets       chan *net.IPAddr
-	Output        chan *string
-	Done          chan struct{}
-	Errors        chan error
-	resultsChan   chan *Probe
-	inputDoneChan chan struct{}
-	throttleChan  chan int
-	expectedChan  chan int
+	Targets        chan *net.IPAddr
+	Done           chan struct{}
+	Errors         chan error
+	OutputDoneChan chan struct{}
+	OutputF        OutputFunc
+	ErrorF         ErrorFunc
+	resultsChan    chan *Probe
+	inputDoneChan  chan struct{}
+	throttleChan   chan int
+	expectedChan   chan int
 }
-/*
-type Multi struct {
-	Source    *net.IPAddr
-	Targets   []*net.IPAddr
-	FirstPort int
-	LastPort  int
-	Timeout   time.Duration
-	Throttle  int
-	Results   []*Single
-	Channel   chan *Single
-}
-*/
 
 /////
 // Constructors
@@ -123,35 +122,19 @@ func NewScan(params *Params) (scan *Scan, err error) {
 			scan.source, _ = net.ResolveIPAddr("ip", "::1")
 		}
 	}
+	scan.OutputF = defaultOutput
+	scan.ErrorF = defaultError
 	scan.Targets = make(chan *net.IPAddr)
-	scan.Output = make(chan *string)
 	scan.Done = make(chan struct{})
 	scan.Errors = make(chan error)
 	scan.resultsChan = make(chan *Probe)
 	scan.inputDoneChan = make(chan struct{})
+	scan.OutputDoneChan = make(chan struct{})
 	scan.expectedChan = make(chan int)
 	scan.throttleChan = make(chan int, params.throttle)
 	Trace.Printf("NewScan() [throttle: %d]\n", scan.throttle)
 	return
 }
-
-/*
-// NewMulti provides a validated constructor for a new Multi object.  Returns Multi object
-// and any errors encountered during address validation.  Use AddMultiIP to increment Targets list
-func NewMulti(sourceAddr string, firstPort, lastPort int) (temp *Multi, err error) {
-	err = CheckPorts(firstPort, lastPort)
-	if err != nil {
-		return &Multi{}, err
-	}
-	temp = &Multi{FirstPort: firstPort, LastPort: lastPort}
-
-	temp.Source, err = net.ResolveIPAddr("ip", sourceAddr)
-	if err != nil {
-		//		fmt.Fprintf(os.Stderr, "NewSingle error: %s", err.Error())
-	}
-	return temp, err
-}
-*/
 
 /////
 // Scan Methods
@@ -271,7 +254,6 @@ func (scan *Scan) PerformScan() {
 				Trace.Println("Scan.PerformScan case <-scan.Done:")
 			// cleanup and abort
 			default:
-				Trace.Println("Scan.PerformScan default:")
 				// Second tier priority is:
 				// * Increment expected value to ensure expected is current
 				// * Service target channel to spawn more probes
@@ -300,20 +282,26 @@ func (scan *Scan) PerformScan() {
 						}
 						// Submit quantity of probes results expected from last
 						// target entry to expectedChan
-						Trace.Printf("Scan.PerformScan scan.expectedChan <-: [nextTarget: %s] [expected: %d]\n", nextTarget.IP.String(), scan.lastPort - scan.firstPort + 1)
+						Trace.Printf("Scan.PerformScan scan.expectedChan <-: [nextTarget: %s] [expected: %d]\n", nextTarget.IP.String(), scan.lastPort-scan.firstPort+1)
 						scan.expectedChan <- scan.lastPort - scan.firstPort + 1
 					}()
-					
+
 				case result := <-scan.resultsChan:
 					Trace.Printf("Scan.PerformScan case result := <-scan.resultsChan: [result: %s]\n", result.GetResult())
 					// Remove token from throttleChan since resultChan signals completion
 					// of a probe.  Process the results and push to output channel.
+					received++
 					<-scan.throttleChan
-					probeOutput := result.GetResult()
-					scan.Output <- &probeOutput
-					
+					scan.OutputF(result)
+					//probeOutput := result.GetResult()
+					//scan.Output <- &probeOutput
+
+				case cherr := <-scan.Errors:
+					// Receive and error from the error channel and process it
+					// with registered error handler
+					scan.ErrorF(cherr)
+
 				default:
-					Trace.Println("Scan.PerformScan default:")
 					// Third tier priority is check if inputDone channel is closed,
 					// and if it is determine if all results expected have been
 					// received
@@ -323,6 +311,7 @@ func (scan *Scan) PerformScan() {
 						if total > 0 && total-received == 0 {
 							// All input has been placed on targets channel, converted
 							// to probes, and results received - scan complete
+							close(scan.OutputDoneChan)
 							return
 						} else {
 							// Otherwise, there are outstanding probes not yet complete.
@@ -343,158 +332,6 @@ func (scan *Scan) PerformScan() {
 		}
 	}()
 }
-
-/*
-/////
-// Multi Methods
-/////
-
-//  AddMultiIP adds an IP address to Multi object via string (utilty function)
-func (m *Multi) AddMultiIP(targetAddr string) (err error) {
-	temp, err := net.ResolveIPAddr("ip", targetAddr)
-	if err != nil {
-		return err
-	}
-	m.Targets = append(m.Targets, temp)
-	return
-}
-
-//  AddMultiIPSlice adds an IP addresses to Multi object via IPAddr slice
-func (m *Multi) AddMultiIPSlice(targetAddr []*net.IPAddr) (err error) {
-	Trace.Println("Entered AddMultiIPSlice")
-	if len(targetAddr) == 0 {
-		err = fmt.Errorf("ParseTimeoutOpt error: empty targetAddr slice")
-		return
-	}
-
-	// Concatenate additional targets to Multi target list
-	m.Targets = append(m.Targets, targetAddr...)
-	return
-}
-*/
-
-func CheckPorts(firstPort, lastPort int) (err error) {
-	if firstPort > 0 && lastPort <= MAXPORT && firstPort <= lastPort {
-		return
-	} else {
-		err = fmt.Errorf("checkPort error: invalid port range (firstPort: %d, lastPort: %d)", firstPort, lastPort)
-		return
-	}
-}
-
-/*
-// Multi.Scan implements the scan across multiple targets.  The throttle value
-// is use to determine the maximum number of concurrent probe.Send() goroutines
-// that should be allowed simultaneously.  This is implemented using a two-
-//  stage channel - the 'inflight' channel sets the buffer size to the maximum
-// number of Single objects that should be in-flight simultaneously.  Each
-// Single object attempts to push its index (arbitrary token) onto the inflight
-// channel before calling its Single.Scan() function, and blocks if the inflight
-// channel is currently full.  Once a Single.Scan() is complete it sends its
-// results on the receiver channel, and upon receipt of the result, a token is
-// removed from the throttle channel.
-//
-// Throttling strategy:
-// When throttle exceeds (nodes * probes), there is no bottleneck, and both
-// breadth and depth can be set to respective max.  When throttle is less than
-// nodes * probes, maximization of throughput is required (depth * breadth ~=
-// throttle).
-// Settings are selected based on the four quadrants below
-//
-//                  sqrt(T) > N        sqrt(T) < N
-//               __________________________________
-//              |               |                 |   T = Throttle
-// sqrt(T) > P  |   B=N  D=P    |  B=T/S  D=S     |   P = Probes (per target)
-//              |   (T > N*P)   |                 |   N = Nodes (to be scanned)
-//              |---------------------------------|   B = Breadth (concurrent
-//              |               |                 |       nodes)
-// sqrt(T) < P  |  B=N  D=T/N   |  B = sqrt(T)    |   D = Depth (concurrent
-//              |               |  D = sqrt(T)    |       probes per target)
-//               __________________________________
-//
-//
-func (m *Multi) Scan() {
-	Trace.Println("Entered Multi.Scan()")
-
-	throttle := m.Throttle
-	// calculate throttle = global maximum divided by the number of Sends per Single
-	nodes := len(m.Targets)
-	probes := m.LastPort - m.FirstPort + 1
-	Trace.Println("Multi.Scan nodes::", nodes)
-	Trace.Println("Multi.Scan probes:", probes)
-
-	// take sqrt of throttle value, rounded up to nearest integer (avoids corner case)
-	t2root := int(math.Ceil(math.Sqrt(float64(throttle))))
-	Trace.Println("Multi.Scan throttle:", throttle)
-	Trace.Println("Multi.Scan t2root:", t2root)
-
-	var depth int
-	var breadth int
-	switch {
-	case throttle >= nodes*probes:
-		Trace.Println("throttle >= nodes*probes")
-		depth = probes
-		breadth = nodes
-	case t2root <= nodes && t2root <= probes:
-		Trace.Println("t2root <= nodes && t2root <= probes")
-		depth = t2root
-		breadth = t2root
-	case t2root <= nodes:
-		Trace.Println("t2root <= nodes")
-		breadth = throttle / probes
-		depth = probes
-	case t2root <= probes:
-		Trace.Println("t2root <= probes")
-		breadth = nodes
-		depth = throttle / nodes
-	}
-
-	// slight optimization that if high throttle makes breadth larger than
-	// number of nodes, reduce to number of nodes, in order to prevent overallocation
-	// of buffer space in 'inflight' channel
-	if breadth > nodes {
-		breadth = nodes
-	} else if breadth < 1 { // correct for integer division truncation corner cases
-		breadth = 1
-	}
-	if depth < 1 {
-		depth = 1
-	}
-
-	Trace.Println("Multi.Scan breadth:", breadth)
-	Trace.Println("Multi.Scan depth:", depth)
-
-	// create throttle channel (int)
-	inflight := make(chan int, breadth)
-	// create receiver channel (*Single)
-	m.Channel = make(chan *Single)
-
-	// create goroutine to launch scans (which are goroutines)
-	go func() {
-		for index, target := range m.Targets {
-			//			fmt.Fprintf(os.Stderr, "Multi.Scan func1() [index,target]: %d %s\n", index, target.String())
-			inflight <- index
-			next := &Single{Source: m.Source, Target: target, FirstPort: m.FirstPort, LastPort: m.LastPort, Timeout: m.Timeout}
-			next.Results = make([]*Probe, next.LastPort-next.FirstPort+1)
-			// create goroutine to execute Single.Scan and send to Multi.Channel upon completion
-			go func(next *Single) {
-				//				fmt.Fprintf(os.Stderr, "Multi.Scan func2() [next.Target]: %s\n", next.Target.String())
-				next.Scan(depth)
-				m.Channel <- next
-			}(next)
-		}
-	}()
-
-	// receiver loop - when receive result, append to Multi.Results, then remove
-	// token from throttle channel.  Exit when receive count matches expected
-	for received := 0; received < len(m.Targets); received++ {
-		latest := <-m.Channel
-		m.Results = append(m.Results, latest)
-		<-inflight
-	}
-
-}
-*/
 
 /////
 // Param Methods
@@ -563,21 +400,6 @@ func (params *Params) adjustRlimit() (err error) {
 
 	return
 }
-
-// InitializeMulti transfers all options from Params stuct to input Multi object
-/*
-func (params *Params) InitializeMulti(multi *Multi) (err error) {
-	Trace.Println("Entered InitializeMulti")
-	multi.FirstPort = params.firstPort
-	multi.LastPort = params.lastPort
-	multi.Timeout = params.timeout
-	multi.Throttle = params.throttle
-	if len(params.targetIPs) > 0 {
-		err = multi.AddMultiIPSlice(params.targetIPs)
-	}
-	return
-}
-*/
 
 // ParsePortsOpt validates flag values sent to specify the range of ports to be probed
 func (params *Params) ParsePortsOpt(ports *string) (err error) {
@@ -674,6 +496,23 @@ func (params *Params) ParseSrcPortOpt(srcPort *int) (err error) {
 // Utility functions
 /////
 
+func defaultOutput(probe *Probe) {
+	fmt.Printf(probe.GetResult())
+}
+
+func defaultError(err error) {
+	fmt.Println(err.Error())
+}
+
+func CheckPorts(firstPort, lastPort int) (err error) {
+	if firstPort > 0 && lastPort <= MAXPORT && firstPort <= lastPort {
+		return
+	} else {
+		err = fmt.Errorf("checkPort error: invalid port range (firstPort: %d, lastPort: %d)", firstPort, lastPort)
+		return
+	}
+}
+
 // IncrementIP increments the passed IP address to the next consecutive addr
 func incrementIP(ip net.IP) {
 	for j := len(ip) - 1; j >= 0; j-- {
@@ -691,9 +530,7 @@ func dumpParams(params *Params) {
 	Trace.Println("dumpParams throttle:", params.throttle)
 	Trace.Println("dumpParams timeout:", params.timeout)
 	Trace.Println("dumpParams source:", params.source)
-	//	Trace.Println("dumpParams showall:", params.showall)
 	Trace.Println("dumpParams srcPort:", params.srcPort)
-	Trace.Println("dumpParams showall:", params.firstPort)
 	for idx, target := range *params.targetArgs {
 		Trace.Printf("dumpParams targetIP: %s idx: %d", target, idx)
 	}

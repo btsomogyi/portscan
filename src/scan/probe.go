@@ -3,18 +3,10 @@ package scan
 import (
 	"fmt"
 	"net"
-	"os"
-	//"strconv"
 	"math/rand"
 	"strings"
 	"time"
 )
-
-// NEEDED???
-func init() {
-	//LogInit(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
-	LogInit(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
-}
 
 // Probe struct contains the parameters and results of a single port probe
 type Probe struct {
@@ -190,20 +182,14 @@ func (p *Probe) SendAsync(s *Scan) {
 	Trace.Printf("Probe.SendAsync() Enter... [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
 	go func() {
 		err := p.Send()
-		Trace.Printf("Probe.SendAsync() p.Send() [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
 		select {
 		case <-s.Done:
-			Trace.Printf("Probe.SendAsync() case <-s.Done: [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
 			return
 		default:
-			Trace.Printf("Probe.SendAsync() default: [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
 			{
 				if err != nil {
-					Trace.Println("Probe.SendAsync() err != nil: [p.Target IP:%s] [p.Port: %d] [p.Timeout: %d]\n", p.Target.IP.String(), p.Target.Port, p.Timeout)
 					s.Errors <- err
 				}
-				Trace.Printf("Probe.SendAsync() s.resultsChan <- p: [p.Target IP:%s] [p.Port: %d] [p.Result.State: %s]\n", 
-					p.Target.IP.String(), p.Target.Port, p.Result.State)
 				s.resultsChan <- p
 			}
 		}
