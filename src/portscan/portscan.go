@@ -1,3 +1,8 @@
+/**
+ * @author Blue Thunder Somogyi
+ *
+ * Copyright (c) 2016 Blue Thunder Somogyi
+ */
 package main
 
 import (
@@ -69,14 +74,42 @@ func LogInit(
 // Output
 /////
 
+// OutputKey implements a comparable struct to act as key for OutputMap
+type OutputKey struct {
+	Addr string
+	Port int
+}
+
+func (ok OutputKey) String() string {
+	return fmt.Sprintf("%s:%d", ok.Addr, ok.Port)
+}
+
+type OutputKeys []OutputKey
+
+func (ok OutputKeys) Len() int { return len(ok) }
+
+func (ok OutputKeys) Swap(i, j int) { ok[i], ok[j] = ok[j], ok[i] }
+
+func (ok OutputKeys) Less(i, j int) bool { 
+	switch {
+		case ok[i].Addr < ok[j].Addr:
+		return true
+		case ok[i].Addr == ok[j].Addr && ok[i].Port < ok[j].Port:
+		return true
+		default:
+		return false
+	} 
+}
+
 // OutputMap stores result values pending final sort and display
-var OutputMap map[string]string
+var OutputMap map[OutputKey]string
 
 // MapResults adds result data to map for sorting prior to output.  This is a
 // custom output function provided to the Scan object to allow the result
 // data to be post-processed after the scan is complete.
 func MapResults(probe *scan.Probe) (err error) {
-	OutputMap[probe.Target.String()] = probe.GetResult()
+	NewKey := OutputKey{Addr: probe.Target.IP.String(), Port: probe.Target.Port}
+	OutputMap[NewKey] = probe.GetResult()
 	return
 }
 
@@ -84,11 +117,12 @@ func MapResults(probe *scan.Probe) (err error) {
 // output function provided to the Scan object, then outputs them to the
 // console
 func PortscanOutput() (err error) {
-	var keys []string
+	var keys OutputKeys
+	keys = make(OutputKeys, 0)
 	for k := range OutputMap {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	sort.Sort(keys)
 
 	for _, k := range keys {
 		fmt.Printf(OutputMap[k])
@@ -195,7 +229,7 @@ func PrintUsage(cmdname string) {
 // portscan main ()
 func main() {
 
-
+	// Initialize blank Params struct and pass to parameter parser
 	params := &scan.Params{}
 
 	sort, err := ProcessParameters(params, os.Args[0])
@@ -203,7 +237,8 @@ func main() {
 		os.Exit(1)
 	}
 	
-	OutputMap = make(map[string]string)
+	// Initialize empty OutputMap
+	OutputMap = make(map[OutputKey]string)
 
 	scan, err := scan.NewScan(params)
 	if err != nil {

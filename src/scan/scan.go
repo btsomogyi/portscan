@@ -1,3 +1,9 @@
+/**
+ * @author Blue Thunder Somogyi
+ *
+ * Copyright (c) 2016 Blue Thunder Somogyi
+ */
+
 // Package scan implements the portscan functionality in a reusable package.
 // Overview:
 //	*Params object can be used to initialize a Scan object.
@@ -10,6 +16,7 @@
 //		The Scan object has two function pointers, OutputF and ErrorF, that
 //	can be used to customize the output and error handling behavior respectively.
 //
+
 package scan
 
 import (
@@ -142,13 +149,13 @@ func NewScan(params *Params) (scan *Scan, err error) {
 	}
 	scan.OutputF = defaultOutput
 	scan.ErrorF = defaultError
-	scan.Targets = make(chan *net.IPAddr)
+	scan.Targets = make(chan *net.IPAddr, 2)
 	scan.Done = make(chan struct{})
-	scan.Errors = make(chan error)
+	scan.Errors = make(chan error, 2)
 	scan.resultsChan = make(chan *Probe)
 	scan.inputDoneChan = make(chan struct{})
 	scan.OutputDoneChan = make(chan struct{})
-	scan.expectedChan = make(chan int)
+	scan.expectedChan = make(chan int, 2)
 	scan.throttleChan = make(chan int, params.throttle)
 	Trace.Printf("NewScan() [throttle: %d]\n", scan.throttle)
 	return

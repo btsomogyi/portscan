@@ -1,3 +1,8 @@
+/**
+ * @author Blue Thunder Somogyi
+ *
+ * Copyright (c) 2016 Blue Thunder Somogyi
+ */
 package scan
 
 import (
