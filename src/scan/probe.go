@@ -2,8 +2,8 @@ package scan
 
 import (
 	"fmt"
-	"net"
 	"math/rand"
+	"net"
 	"strings"
 	"time"
 )
@@ -102,8 +102,7 @@ func (p *Probe) Send() (fail error) {
 	// Set the amount of time for goroutine to sleep if max file count exceeded
 	// If timeout 0 (sys default) or < 4s, sleep 1-2 seconds
 	// If timeout longer, sleep for rand(timeout) / 2 seconds
-	//Trace.Printf("Probe.Send() probe.Timeout: %f s\n", p.Timeout.Seconds())
-	//if int(p.Timeout.Seconds()) <= 4 {
+	// Randomized factor is provided during each sleep call
 	if int(p.Timeout.Seconds()) <= 4 {
 		sleeprange = time.Duration(2) * time.Second
 	} else {
@@ -198,7 +197,10 @@ func (p *Probe) SendAsync(s *Scan) {
 
 // GetResult formats the probe result data for output
 func (p *Probe) GetResult() (result string) {
-	return fmt.Sprintf("%s:%d result: %s \n", p.Target.IP, p.Target.Port, p.Result.State.String())
+	if p.Result.Raw != nil {
+		Info.Printf("Probe.GetResult() [Result.Error():%s]\n", p.Result.Raw.Error())
+	}
+	return fmt.Sprintf("%s:%d \tresult: %s \n", p.Target.IP, p.Target.Port, p.Result.State.String())
 }
 
 // GetPort obtains a free unused port and confirms it can be bound

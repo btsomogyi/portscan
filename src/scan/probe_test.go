@@ -34,7 +34,7 @@ func ExampleGetResult() {
 		fmt.Println("Probe:", test.GetResult())
 	}
 	// Output:
-	// Probe: 192.168.1.1:1999 result: FILTERED
+	// Probe: 192.168.1.1:1999 	result: FILTERED
 
 }
 
@@ -204,9 +204,10 @@ func Test6Send(t *testing.T) {
 
 }
 
-/* Testing Helper functions
+/////
+// Testing Helper functions
 // functions used for test validation
-*/
+/////
 
 // checkError is generic routine to abort on unexpected error condition
 func checkError(err error) {

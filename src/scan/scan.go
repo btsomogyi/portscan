@@ -1,4 +1,15 @@
-// Package scan implements the scan logic to trigger multiple probe events
+// Package scan implements the portscan functionality in a reusable package.
+// Overview:
+//	*Params object can be used to initialize a Scan object.
+//	*The Scan object is the driver of portscan process, using two goroutine
+//	based methods, Scan.ProcessTargets() and Scan.PerformScan()
+//	* ProcessTargets() ingests a list of IP Address values and puts them on
+//	a channel for PerformScan() to consume.
+//	* PerformScan() consumes the target channel input provided by ProcessTargets
+//	while maintaining a throttle channel to rate limit execution of Probe.Send()s.
+//		The Scan object has two function pointers, OutputF and ErrorF, that
+//	can be used to customize the output and error handling behavior respectively.
+//
 package scan
 
 import (
@@ -6,7 +17,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	//	"math"
 	"net"
 	"os"
 	"strconv"
@@ -15,8 +25,11 @@ import (
 	"time"
 )
 
-// Initialize
+/////
+// Logging
+/////
 
+// Initialize 
 func init() {
 	debug := os.Getenv("LOGLVL")
 
@@ -66,6 +79,11 @@ func LogInit(
 
 }
 
+/////
+// Constants and Structs
+/////
+
+// Maximum TCP port value
 const MAXPORT = 65535
 
 // SLEEPTIME is number of milliseconds which the ProcessScan function will
@@ -84,7 +102,7 @@ type Params struct {
 }
 
 // OutputFunc is the method used to process Probe results
-type OutputFunc func(*Probe)
+type OutputFunc func(*Probe) error
 
 // ErrorFunc is the method used to process Error stream
 type ErrorFunc func(error)
@@ -183,7 +201,9 @@ func (scan *Scan) ProcessTargets() {
 			targetIP := net.ParseIP(target)
 			select {
 			case <-scan.Done:
-			// cleanup and abort
+				// cleanup and abort
+				defer close(scan.inputDoneChan)
+				return
 			default:
 				{
 					// if single ipaddr push to targets channel, and continue loop
@@ -252,7 +272,9 @@ func (scan *Scan) PerformScan() {
 			select {
 			case <-scan.Done:
 				Trace.Println("Scan.PerformScan case <-scan.Done:")
-			// cleanup and abort
+				// cleanup and abort
+				defer close(scan.OutputDoneChan)
+				return
 			default:
 				// Second tier priority is:
 				// * Increment expected value to ensure expected is current
@@ -292,9 +314,10 @@ func (scan *Scan) PerformScan() {
 					// of a probe.  Process the results and push to output channel.
 					received++
 					<-scan.throttleChan
-					scan.OutputF(result)
-					//probeOutput := result.GetResult()
-					//scan.Output <- &probeOutput
+					oerr := scan.OutputF(result)
+					if oerr != nil {
+						scan.Errors <- oerr
+					}
 
 				case cherr := <-scan.Errors:
 					// Receive and error from the error channel and process it
@@ -406,7 +429,7 @@ func (params *Params) ParsePortsOpt(ports *string) (err error) {
 	split := strings.Split(*ports, "-")
 	var firsterr, lasterr error
 	if len(split) > 2 {
-		err = fmt.Errorf("ParsePortsOpt error: len(split) != 2 [ports: %s]", *ports)
+		err = fmt.Errorf("Port parameter error: invalid specification [ports: %s]", *ports)
 		return
 	}
 
@@ -421,7 +444,7 @@ func (params *Params) ParsePortsOpt(ports *string) (err error) {
 
 	switch {
 	case len(*ports) == 0:
-		err = fmt.Errorf("ParsePortsOpt error: empty ports string")
+		err = fmt.Errorf("Port parameter error: empty ports string")
 		return
 	case firsterr != nil:
 		err = firsterr
@@ -430,15 +453,15 @@ func (params *Params) ParsePortsOpt(ports *string) (err error) {
 		err = lasterr
 		return
 	case params.firstPort > MAXPORT || params.firstPort < 1:
-		err = fmt.Errorf("ParsePortsOpt error: firstPort outside range 1-%d [firstPort: %d]",
+		err = fmt.Errorf("Port parameter error: starting port outside range 1-%d [port: %d]",
 			MAXPORT, params.firstPort)
 		return
 	case params.lastPort > MAXPORT || params.lastPort < 1:
-		err = fmt.Errorf("ParsePortsOpt error: lastPort outside range 1-%d [firstPort: %d]",
+		err = fmt.Errorf("Port parameter error: last port outside range 1-%d [port: %d]",
 			MAXPORT, params.lastPort)
 		return
 	case params.lastPort < params.firstPort:
-		err = fmt.Errorf("ParsePortsOpt error: firstPort greater than lastPort [firstPort: %d, lastPort: %d]",
+		err = fmt.Errorf("Port parameter error: starting port greater than last port [start port: %d, last port: %d]",
 			params.firstPort, params.lastPort)
 		return
 	}
@@ -451,7 +474,7 @@ func (params *Params) ParseTimeoutOpt(timeout *int) (err error) {
 	if *timeout >= 1 {
 		params.timeout = time.Duration(*timeout) * time.Second
 	} else if *timeout <= -1 {
-		err = fmt.Errorf("ParseTimeoutOpt error: timeout < 1 [timeout: %d]",
+		err = fmt.Errorf("Timeout parameter error: timeout must be >= 1 [timeout: %d]",
 			*timeout)
 	}
 	return
@@ -462,7 +485,7 @@ func (params *Params) ParseThrottleOpt(throttle *int) (err error) {
 	if *throttle >= 1 {
 		params.throttle = *throttle
 	} else if *throttle <= -1 {
-		err = fmt.Errorf("ParseThrottleOpt error: throttle < 0 [throttle: %d]",
+		err = fmt.Errorf("Throttle parameter error: throttle must be >= 0 [throttle: %d]",
 			*throttle)
 	}
 	return
@@ -470,8 +493,8 @@ func (params *Params) ParseThrottleOpt(throttle *int) (err error) {
 
 // SetTargetArgs sets the package private Params targetArgs field
 func (params *Params) SetTargetArgs(targetArgs []string) (err error) {
-	if targetArgs != nil {
-		err = fmt.Errorf("SetTargetArgs error: Nil value for targetArgs passed")
+	if len(targetArgs) == 0 {
+		err = fmt.Errorf("Target parameter error: at least one target parameter required")
 	}
 	params.targetArgs = &targetArgs
 
@@ -496,8 +519,9 @@ func (params *Params) ParseSrcPortOpt(srcPort *int) (err error) {
 // Utility functions
 /////
 
-func defaultOutput(probe *Probe) {
+func defaultOutput(probe *Probe) error {
 	fmt.Printf(probe.GetResult())
+	return nil
 }
 
 func defaultError(err error) {

@@ -5,10 +5,7 @@ import (
 	"net"
 	"testing"
 	"time"
-	//	"os"
-	//	"strconv"
 )
-
 
 /////
 // Param test
@@ -189,75 +186,179 @@ func Test2ParseThrottleOpt(t *testing.T) {
 func Test1ProcessTargets(t *testing.T) {
 	argSlice := []string{"127.0.0.1", "2001:db8::68"}
 	params := &Params{}
-
 	var err error
-	var good, bad int
 
-	t.Log("Test1ProcessTargets: params.SetTargetArgs(argSlice)")
 	err = params.SetTargetArgs(argSlice)
 	if err != nil {
+		t.Log(err.Error())
 		t.Fail()
 	}
 
-	t.Log("Test1ProcessTargets: NewScan(Params)")
 	scan, err := NewScan(params)
-
-	t.Log("Test1ProcessTargets: scan.ProcessTargets()")
 	scan.ProcessTargets()
 
-	t.Log("Test1ProcessTargets: for {} start")
-Loop:
-	for {
-		t.Log("Test1ProcessTargets: for {} iteration", good, bad)
-		select {
-		case test := <-scan.Targets:
-			t.Log("Test1ProcessTargets: case test := <-scan.Targets:", good, bad)
-			// find target in slice array
-			if isValueInList(test.IP.String(), argSlice) {
-				good++
-			}
-		case <-scan.Errors:
-			t.Log("Test1ProcessTargets: case <-scan.Errors:", good, bad)
-			close(scan.Done)
+	targets, errs, err := consumeChannels(scan)
+	if err != nil {
+		t.Log("Test1ProcessTargets: consumeChannels err: %s", err.Error())
+		t.Fail()
+		return
+	}
+
+	// smoke test
+	switch {
+	case len(targets) != 2:
+		t.Log("Test1ProcessTargets: len(targets) != 2")
+		t.Fail()
+		return
+	case len(errs) != 0:
+		t.Log("Test1ProcessTargets: len(errs) != 0")
+		t.Fail()
+		return
+	}
+
+	//check results
+	for _, x := range targets {
+		if !isValueInList(x.IP.String(), argSlice) {
+			t.Logf("Parameter %s not found in returned targets", x)
 			t.Fail()
-		case <-time.After(time.Second):
-			t.Log("Test1ProcessTargets: default:", good, bad)
-			select {
-			case <-scan.inputDoneChan:
-				t.Log("Test1ProcessTargets: case <-scan.inputDoneChan:", good, bad)
-				break Loop
-			case <-time.After(time.Second):
-				t.Log("Test1ProcessTargets: case <-time.After(time.Second):", good, bad)
-				if bad > 100 {
-					close(scan.Done)
-					t.Fail()
-				}
-				bad++
-				continue
-			}
+			return
 		}
 	}
-	close(scan.Done)
+}
 
-	t.Logf("Test1ProcessTargets: [good: %d] [bad: %d] [len(argSlice): %d]\n", good, bad, len(argSlice))
-	if good != len(argSlice) {
-		t.Logf("Test1ParseTargetArg error: %s\n", err)
+// Test2Scan.ProcessTargets()  - bad input (single addrs)
+func Test2ProcessTargets(t *testing.T) {
+	argSlice := []string{"127.0.0.1", "xyz"}
+	params := &Params{}
+
+	var err error
+	//	var good, bad int
+
+	err = params.SetTargetArgs(argSlice)
+	if err != nil {
+		t.Log(err.Error())
 		t.Fail()
+	}
+
+	scan, err := NewScan(params)
+	scan.ProcessTargets()
+
+	targets, errs, err := consumeChannels(scan)
+	if err != nil {
+		t.Log("Test1ProcessTargets: consumeChannels err: %s", err.Error())
+		t.Fail()
+		return
+	}
+
+	// smoke test
+	switch {
+	case len(targets) != 1:
+		t.Log("Test1ProcessTargets: len(targets) != 2\n")
+		t.Fail()
+		return
+	case len(errs) != 1:
+		t.Log("Test1ProcessTargets: len(errs) != 0\n")
+		t.Fail()
+		return
+	}
+
+	//check results
+	if targets[0].IP.String() != argSlice[0] {
+		t.Logf("Test1ProcessTargets: %s != %s\n", targets[0].IP.String(), argSlice[0])
+		t.Fail()
+		return
 	}
 }
 
 // Test1incrementIP - good input (single addrs)
 func Test1incrementIP(t *testing.T) {
-	//argSlice := []string{"192.168.0.1"}
 	ip := net.ParseIP("192.168.0.1")
-	//params := &Params{}
-	//var err error
+
 	incrementIP(ip)
 	if !ip.Equal(net.ParseIP("192.168.0.2")) {
 		t.Logf("Test1incrementIP [ip: %s] expected '192.168.0.2'\n", ip.String())
 		t.Fail()
 	}
 }
+
+/////
+// Testing Helper functions
+// functions used for test validation
+/////
+
+// consumeChannels consumes targets sent by Send.ProcessTargets()
+func consumeChannels(scan *Scan) (targets []*net.IPAddr, errs []error, err error) {
+	targets = make([]*net.IPAddr, 0)
+	errs = make([]error, 0)
+	count := 0
+	for {
+
+		select {
+		case nextTarget := <-scan.Targets:
+			targets = append(targets, nextTarget)
+
+		case cherr := <-scan.Errors:
+			errs = append(errs, cherr)
+
+		default:
+			select {
+			case <-scan.inputDoneChan:
+				defer close(scan.OutputDoneChan)
+				return
+			case <-time.After(time.Second):
+				count++
+				if count > 10 {
+					err = fmt.Errorf("consumeChannels time out")
+					defer close(scan.OutputDoneChan)
+					return
+				}
+				continue
+			}
+
+		}
+	}
+
+	return
+}
+
+// consumeOutput consumes targets sent by Send.ProcessTargets()
+/*
+func consumeOutput(scan *Scan) (targets []*net.IPAddr, results []*Probe, errs []error, err error) {
+	results = make([]*Probe, 0)
+	targets = make([]*net.IPAddr, 0)
+	errs = make([]error, 0)
+	count := 0
+	for {
+
+		select {
+		case nextTarget := <-scan.Targets:
+			targets = append(targets, nextTarget)
+
+		case result := <-scan.resultsChan:
+			results = append(results, result)
+
+		case cherr := <-scan.Errors:
+			errs = append(errs, cherr)
+
+		default:
+			select {
+			case <-scan.inputDoneChan:
+				defer close(scan.OutputDoneChan)
+				return
+			case <-time.After(time.Second):
+				count++
+				if count > 10 {
+					return
+				}
+				continue
+			}
+
+		}
+	}
+
+	return
+}
+*/
 
 // validateParamPorts checks for valid Params.firstPort and Params.lastPort values
 func validateParamPorts(params *Params) (err error) {
@@ -301,16 +402,12 @@ func validateParamThrottle(params *Params) (err error) {
 
 // validateParamArgs checks for valid Params.timeout values and number of
 func validateParamArgs(params *Params, numArgs int) (err error) {
-	//	Info.Printf("validateParamArgs:[len(params.targetIPs): %d] [numArgs: %d]\n", len(params.targetIPs), numArgs)
-
 	tested := make([]net.IP, 0)
 
 	for _, target := range *params.targetArgs {
-		//		Info.Printf("validateParamArgs:[index: : %d] [target: %d]\n", idx, target)
 		tempIP := net.ParseIP(target)
 
 		if tempIP != nil {
-			//			Info.Printf("validateParamArgs:[tempIP: %s]\n", tempIP.String())
 			tested = append(tested, tempIP)
 		}
 	}
@@ -318,10 +415,6 @@ func validateParamArgs(params *Params, numArgs int) (err error) {
 	if len(tested) != numArgs {
 		err = fmt.Errorf("validateParamTimeout error: len(params.targetIPs) != numArgs [len(params.targetIPs): %d]\n",
 			len(tested))
-		/*		for idx, testedGood := range tested {
-					Info.Printf("validateParamArgs:[index: : %d] [testedGood: %d]\n", idx, testedGood)
-				}
-		*/
 	}
 	return
 }
@@ -335,5 +428,3 @@ func isValueInList(value string, list []string) bool {
 	}
 	return false
 }
-
-
