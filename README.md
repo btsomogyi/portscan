@@ -5,7 +5,7 @@ Portscan is a Golang implementation of a network port scanner with the following
 - IPv4 and IPv6 network scanning
 - Scans are fully concurrent and throttle controlled
 - Scans individual IP addresses, CIDR blocks, or a combination
-- 
+
 ### Installation 
 If Golang is already installed, use 'go get' to pull down
 ```
@@ -38,7 +38,7 @@ $ LOGLVL=trace
 $ export LOGLVL
 $ portscan 127.0.0.1
 ```
-***
+
 ### Design
 
 Portscan utilizes the Golang native concurrancy features to allow an arbitrarily large network scans to complete using a minimum of system memory (influenced primarily by concurrancy and whether output should be sorted prior to display).
@@ -63,7 +63,7 @@ From scan.go
 ```
 ### License
 Apache License, Version 2.0
-***
+
 ### TODO
 - Implement alternative raw socket based scan (avoiding ulimit issue)
 - Implement check for IPv4 & IPv6 interface address check on local system
