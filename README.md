@@ -10,9 +10,8 @@ Portscan is a Golang implementation of a network port scanner with the following
 If Golang is already installed, use 'go get' to pull down
 ```
 $ go get github.com/btsomogyi/portscan
-$ go install portscan
-$ $PATH=$PATH:$GOPATH/portscan/bin
-$ portscan -h
+$ go install github.com/btsomogyi/portscan/cmd/netscan
+$ netscan -h
 ```
 
 ### Usage
