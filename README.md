@@ -11,7 +11,7 @@ If Golang is already installed, use 'go get' to pull down
 ```
 $ go get github.com/btsomogyi/portscan/cmd/portscan
 $ go install github.com/btsomogyi/portscan/cmd/portscan
-$ netscan -h
+$ portscan -h
 ```
 
 ### Usage
