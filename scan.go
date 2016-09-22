@@ -13,6 +13,9 @@
 //	a channel for PerformScan() to consume.
 //	* PerformScan() consumes the target channel input provided by ProcessTargets
 //	while maintaining a throttle channel to rate limit execution of Probe.Send()s.
+//	* ScanComplete() waits for completion signals and returns with an error on
+//	any abnormal signal assertions.  Otherwise returns when all output is ready
+//	to process.
 //		The Scan object has two function pointers, OutputF and ErrorF, that
 //	can be used to customize the output and error handling behavior respectively.
 //
@@ -149,13 +152,13 @@ func NewScan(params *Params) (scan *Scan, err error) {
 	}
 	scan.OutputF = defaultOutput
 	scan.ErrorF = defaultError
-	scan.Targets = make(chan *net.IPAddr, 2)
+	scan.Targets = make(chan *net.IPAddr, 0)
 	scan.Done = make(chan struct{})
-	scan.Errors = make(chan error, 2)
+	scan.Errors = make(chan error, 0)
 	scan.resultsChan = make(chan *Probe)
 	scan.inputDoneChan = make(chan struct{})
 	scan.OutputDoneChan = make(chan struct{})
-	scan.expectedChan = make(chan int, 2)
+	scan.expectedChan = make(chan int, 0)
 	scan.throttleChan = make(chan int, params.throttle)
 	Trace.Printf("NewScan() [throttle: %d]\n", scan.throttle)
 	return
@@ -193,7 +196,6 @@ func (scan *Scan) ProcessTargets() {
 	if len(*scan.targetArgs) <= 0 {
 		scan.Errors <- fmt.Errorf("Scan.ProcessTargets error: Zero targets input")
 		close(scan.Done)
-
 	}
 
 	// First check done channel for preemptive closure, else proceed.
@@ -204,6 +206,7 @@ func (scan *Scan) ProcessTargets() {
 	// error to error channel if string value fails to parse as either.
 	//
 	go func() {
+		var in int
 		for _, target := range *scan.targetArgs {
 			targetIP := net.ParseIP(target)
 			select {
@@ -217,8 +220,8 @@ func (scan *Scan) ProcessTargets() {
 					if targetIP != nil {
 						Trace.Println("Scan.ProcessTargets targetIP:", targetIP.String())
 						ipaddr, _ := net.ResolveIPAddr("ip", targetIP.String())
-						//params.targetIPs = append(params.targetIPs, ipaddr)
 						scan.Targets <- ipaddr
+						in++
 						continue
 					}
 
@@ -228,13 +231,15 @@ func (scan *Scan) ProcessTargets() {
 					if neterr == nil {
 						Trace.Println("Scan.ProcessTargets targetNetwork:", targetNetwork)
 						Trace.Println("Scan.ProcessTargets targetNetmask:", targetNetwork)
-						for targetIP := targetNetNum.Mask(targetNetwork.Mask); targetNetwork.Contains(targetIP); incrementIP(targetIP) {
+						for targetIP := targetNetNum.Mask(targetNetwork.Mask); 
+								targetNetwork.Contains(targetIP); incrementIP(targetIP) {
 							select {
 							case <-scan.Done:
 							// cleanup and abort
 							default:
 								ipaddr, _ := net.ResolveIPAddr("ip", targetIP.String())
 								scan.Targets <- ipaddr
+								in++
 							}
 
 						}
@@ -252,8 +257,14 @@ func (scan *Scan) ProcessTargets() {
 			}
 
 		}
-		Trace.Println("Scan.ProcessTargets close(scan.inputDoneChan)")
-		close(scan.inputDoneChan)
+		if in > 0 {
+			Trace.Println("Scan.ProcessTargets close(scan.inputDoneChan)")
+			close(scan.inputDoneChan)
+		} else {
+			Trace.Println("Scan.ProcessTargets no valid targets - close(scan.DoneChan)")
+			scan.Errors <- fmt.Errorf("No valid targets provided - aborting")
+			close(scan.Done)
+		}
 	}() // end go func()
 
 }
@@ -361,6 +372,22 @@ func (scan *Scan) PerformScan() {
 			}
 		}
 	}()
+}
+
+// ScanComplete waits for the completion of the scan, and returns and error if scan completed abnormally (scan.Done closed).
+// Returns without error when all scan output is ready to be processed, and ensures all goroutines are terminated (by
+// closing scan.Done).
+func (scan *Scan) ScanComplete() (err error) {
+	select {
+	case <-scan.Done:
+		// Abnormal termination
+		err = fmt.Errorf("Abnormal termination of scan")
+		return
+	case <-scan.OutputDoneChan:
+		// Normal termination - signal Done in case of stray goroutine
+		close(scan.Done)
+		return
+	}
 }
 
 /////

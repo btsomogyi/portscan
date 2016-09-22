@@ -6,9 +6,9 @@
 package main
 
 import (
-	"github.com/btsomogyi/portscan"
 	"flag"
 	"fmt"
+	"github.com/btsomogyi/portscan"
 	"io"
 	"io/ioutil"
 	"log"
@@ -90,15 +90,15 @@ func (ok OutputKeys) Len() int { return len(ok) }
 
 func (ok OutputKeys) Swap(i, j int) { ok[i], ok[j] = ok[j], ok[i] }
 
-func (ok OutputKeys) Less(i, j int) bool { 
+func (ok OutputKeys) Less(i, j int) bool {
 	switch {
-		case ok[i].Addr < ok[j].Addr:
+	case ok[i].Addr < ok[j].Addr:
 		return true
-		case ok[i].Addr == ok[j].Addr && ok[i].Port < ok[j].Port:
+	case ok[i].Addr == ok[j].Addr && ok[i].Port < ok[j].Port:
 		return true
-		default:
+	default:
 		return false
-	} 
+	}
 }
 
 // OutputMap stores result values pending final sort and display
@@ -148,7 +148,7 @@ func ProcessParameters(params *portscan.Params, cmdname string) (sort bool, err 
 	//sourcePortFlag := flag.Int("srcport", 0, "source port for probes: defaults to random")
 
 	flag.Parse()
-	
+
 	err = params.ParsePortsOpt(portFlag)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -179,21 +179,21 @@ func ProcessParameters(params *portscan.Params, cmdname string) (sort bool, err 
 		PrintUsage(cmdname)
 		return
 	}
-	
+
 	err = params.SetTargetArgs(flag.Args())
 	if err != nil {
 		fmt.Println(err.Error())
 		PrintUsage(cmdname)
 		return
 	}
-			
+
 	// invalid sort flag is non-fatal
 	var serr error
 	sort, serr = ParseSortOpt(sortFlag)
 	if serr != nil {
 		fmt.Println(serr.Error())
 	}
-	
+
 	return
 }
 
@@ -236,7 +236,7 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
-	
+
 	// Initialize empty OutputMap
 	OutputMap = make(map[OutputKey]string)
 
@@ -250,9 +250,6 @@ func main() {
 		scan.OutputF = MapResults
 	}
 
-	// Defer the close of the done channel to shutdown stray goroutines on program close
-	defer close(scan.Done)
-
 	// Initiate processing of target list
 	scan.ProcessTargets()
 
@@ -260,7 +257,10 @@ func main() {
 	scan.PerformScan()
 
 	// Wait for output to complete
-	<-scan.OutputDoneChan
+	err = scan.ScanComplete()
+	if err != nil {
+		fmt.Println("%s\n", err)
+	}
 
 	// Sort and output results
 	if sort == true {

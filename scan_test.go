@@ -1,4 +1,4 @@
-/**
+/*
  * @author Blue Thunder Somogyi
  *
  * Copyright (c) 2016 Blue Thunder Somogyi
@@ -202,7 +202,7 @@ func Test1ProcessTargets(t *testing.T) {
 	scan, err := NewScan(params)
 	scan.ProcessTargets()
 
-	targets, errs, err := consumeChannels(scan)
+	targets, results, errs, err := consumeChannels(t, scan)
 	if err != nil {
 		t.Log("Test1ProcessTargets: consumeChannels err: %s", err.Error())
 		t.Fail()
@@ -212,10 +212,17 @@ func Test1ProcessTargets(t *testing.T) {
 	// smoke test
 	switch {
 	case len(targets) != 2:
+		t.Logf("Test1ProcessTargets: len(targets) = %d\n", len(targets))
 		t.Log("Test1ProcessTargets: len(targets) != 2")
 		t.Fail()
 		return
+	case len(results) != 0:
+		t.Logf("Test1ProcessTargets: len(results) = %d\n", len(results))
+		t.Log("Test1ProcessTargets: len(results) != 2")
+		t.Fail()
+		return
 	case len(errs) != 0:
+		t.Logf("Test1ProcessTargets: len(errs) = %d\n", len(errs))
 		t.Log("Test1ProcessTargets: len(errs) != 0")
 		t.Fail()
 		return
@@ -248,7 +255,7 @@ func Test2ProcessTargets(t *testing.T) {
 	scan, err := NewScan(params)
 	scan.ProcessTargets()
 
-	targets, errs, err := consumeChannels(scan)
+	targets, results, errs, err := consumeChannels(t, scan)
 	if err != nil {
 		t.Log("Test1ProcessTargets: consumeChannels err: %s", err.Error())
 		t.Fail()
@@ -258,10 +265,17 @@ func Test2ProcessTargets(t *testing.T) {
 	// smoke test
 	switch {
 	case len(targets) != 1:
+		t.Logf("Test1ProcessTargets: len(targets) = %d\n", len(targets))
 		t.Log("Test1ProcessTargets: len(targets) != 2\n")
 		t.Fail()
 		return
+	case len(results) != 0:
+		t.Logf("Test1ProcessTargets: len(results) = %d\n", len(results))
+		t.Log("Test1ProcessTargets: len(results) != 2")
+		t.Fail()
+		return
 	case len(errs) != 1:
+		t.Logf("Test1ProcessTargets: len(errs) = %d\n", len(errs))
 		t.Log("Test1ProcessTargets: len(errs) != 0\n")
 		t.Fail()
 		return
@@ -292,8 +306,9 @@ func Test1incrementIP(t *testing.T) {
 /////
 
 // consumeChannels consumes targets sent by Send.ProcessTargets()
-func consumeChannels(scan *Scan) (targets []*net.IPAddr, errs []error, err error) {
+func consumeChannels(t *testing.T, scan *Scan) (targets []*net.IPAddr, results []*Probe, errs []error, err error) {
 	targets = make([]*net.IPAddr, 0)
+	results = make([]*Probe, 0)
 	errs = make([]error, 0)
 	count := 0
 	for {
@@ -301,21 +316,29 @@ func consumeChannels(scan *Scan) (targets []*net.IPAddr, errs []error, err error
 		select {
 		case nextTarget := <-scan.Targets:
 			targets = append(targets, nextTarget)
+			t.Log("consumeChannels: len(targets) =", len(targets))
+
+		case result := <-scan.resultsChan:
+			results = append(results, result)
+			t.Log("consumeChannels: len(results) =", len(results))
 
 		case cherr := <-scan.Errors:
 			errs = append(errs, cherr)
+			t.Log("consumeChannels: len(errs) =", len(errs))
 
 		default:
 			select {
 			case <-scan.inputDoneChan:
+				t.Log("consumeChannels: case<-scan.inputDoneChan")
 				defer close(scan.OutputDoneChan)
-				return
+				return 
 			case <-time.After(time.Second):
+				t.Log("consumeChannels: case<-time.After")
 				count++
 				if count > 10 {
-					err = fmt.Errorf("consumeChannels time out")
+					t.Log("consumeChannels time out")
 					defer close(scan.OutputDoneChan)
-					return
+					return 
 				}
 				continue
 			}
@@ -323,12 +346,12 @@ func consumeChannels(scan *Scan) (targets []*net.IPAddr, errs []error, err error
 		}
 	}
 
-	return
+	return 
 }
 
 // consumeOutput consumes targets sent by Send.ProcessTargets()
 /*
-func consumeOutput(scan *Scan) (targets []*net.IPAddr, results []*Probe, errs []error, err error) {
+func consumeChannels(t *testing.T, scan *Scan) (targets []*net.IPAddr, results []*Probe, errs []error, err error) {
 	results = make([]*Probe, 0)
 	targets = make([]*net.IPAddr, 0)
 	errs = make([]error, 0)
@@ -338,9 +361,11 @@ func consumeOutput(scan *Scan) (targets []*net.IPAddr, results []*Probe, errs []
 		select {
 		case nextTarget := <-scan.Targets:
 			targets = append(targets, nextTarget)
+			t.Log("consumeOutput: len(targets) =", len(targets))
 
 		case result := <-scan.resultsChan:
 			results = append(results, result)
+			t.Log("consumeOutput: len(targets) =", len(targets))
 
 		case cherr := <-scan.Errors:
 			errs = append(errs, cherr)

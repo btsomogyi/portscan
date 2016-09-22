@@ -31,5 +31,8 @@ _testmain.go
 # Eclipse files
 .project
 
+# vim tmp files
+.swp
+
 #MACOS
 .DS_Store
