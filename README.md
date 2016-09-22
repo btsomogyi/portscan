@@ -57,6 +57,9 @@ From scan.go
 //	a channel for PerformScan() to consume.
 //	* PerformScan() consumes the target channel input provided by ProcessTargets
 //	while maintaining a throttle channel to rate limit execution of Probe.Send()s.
+//      * ScanComplete() waits for completion signals and returns with an error on
+//      any abnormal signal assertions.  Otherwise returns when all output is ready
+//      to process.
 //		The Scan object has two function pointers, OutputF and ErrorF, that
 //	can be used to customize the output and error handling behavior respectively.
 ```
