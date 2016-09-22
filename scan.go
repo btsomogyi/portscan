@@ -13,7 +13,7 @@
 //	a channel for PerformScan() to consume.
 //	* PerformScan() consumes the target channel input provided by ProcessTargets
 //	while maintaining a throttle channel to rate limit execution of Probe.Send()s.
-//	* ScanComplete() waits for completion signals and returns with an error on
+//	* CompleteScan() waits for completion signals and returns with an error on
 //	any abnormal signal assertions.  Otherwise returns when all output is ready
 //	to process.
 //		The Scan object has two function pointers, OutputF and ErrorF, that
@@ -374,10 +374,10 @@ func (scan *Scan) PerformScan() {
 	}()
 }
 
-// ScanComplete waits for the completion of the scan, and returns and error if scan completed abnormally (scan.Done closed).
+// CompleteScan waits for the completion of the scan, and returns and error if scan completed abnormally (scan.Done closed).
 // Returns without error when all scan output is ready to be processed, and ensures all goroutines are terminated (by
 // closing scan.Done).
-func (scan *Scan) ScanComplete() (err error) {
+func (scan *Scan) CompleteScan() (err error) {
 	select {
 	case <-scan.Done:
 		// Abnormal termination

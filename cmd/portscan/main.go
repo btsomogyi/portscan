@@ -257,9 +257,9 @@ func main() {
 	scan.PerformScan()
 
 	// Wait for output to complete
-	err = scan.ScanComplete()
+	err = scan.CompleteScan()
 	if err != nil {
-		fmt.Println("%s\n", err)
+		fmt.Println(err.Error())
 	}
 
 	// Sort and output results
